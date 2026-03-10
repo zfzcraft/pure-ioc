@@ -53,6 +53,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private static final String BASE_CONFIG_FILE = "app.yml";
 
 	private static final Yaml YAML = new Yaml();
+	
 	private AtomicBoolean refresh = new AtomicBoolean(false);
 
 	private AtomicBoolean preheatComplete = new AtomicBoolean(false);
@@ -116,7 +117,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			loadPlugin();
 			loadPluginClasses();
 			loadNetworkEnvironment();
-
 			collectFactoryBeanMatchers();
 			collectBeanFactoryAndAnnotations();
 			scanPackageClasses();
@@ -142,7 +142,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				} catch (Exception e) {
 					throw IocException.of(e);
 				}
-
 			}
 		}
 
@@ -157,11 +156,9 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				}
 			}
 		}
-
 	}
 
 	private void loadNetworkEnvironment() {
-		Environment environment = new LocalEnvironment(env);
 		List<Class<?>> list = pluginClasses.stream().filter(ele -> EnvironmentLoader.class.isAssignableFrom(ele))
 				.collect(Collectors.toList());
 		for (Class<?> networkEnvironmentLoaderClass : list) {
@@ -173,9 +170,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			} catch (Exception e) {
 				throw IocException.of(e);
 			}
-
 		}
-
 	}
 
 	/**
@@ -187,12 +182,10 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			String key = entry.getKey();
 			Object sourceValue = entry.getValue();
 			Object targetValue = target.get(key);
-
 			// 跳过null值（避免覆盖已有有效值）
 			if (sourceValue == null) {
 				continue;
 			}
-
 			// 场景1：目标和源都是Map → 递归合并
 			if (targetValue instanceof Map && sourceValue instanceof Map) {
 				deepMerge((Map<String, Object>) targetValue, (Map<String, Object>) sourceValue);
@@ -231,7 +224,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		beanDefinitionMap.clear();
 		beanPostProcessors.clear();
 		applicationClasses.clear();
-
 		beanFactoryMap = null;
 		plugins = null;
 		beanPostProcessorClasses = null;
@@ -242,7 +234,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		beanDefinitionMap = null;
 		beanPostProcessors = null;
 		applicationClasses = null;
-
 	}
 
 	private void registerApplicationContext() {
@@ -316,7 +307,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 						}
 					}
 				}
-
 			}
 		}
 	}
@@ -336,7 +326,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		deepMerge(env, nestedArgsMap);
 		// 确定激活的环境（命令行优先，其次是配置文件）
 		String activeProfile = determineActiveProfile();
-
 		// 加载并合并环境配置 application-{active}.yml
 		if (isNotEmpty(activeProfile)) {
 			String envConfigFile = APP + LINE + activeProfile + YML;
@@ -346,7 +335,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			// 启动参数覆盖所有配置（最高优先级）
 			deepMerge(env, nestedArgsMap);
 		}
-
 	}
 
 	private boolean isNotEmpty(String activeProfile) {
@@ -371,21 +359,17 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private void put(Map<String, Object> root, String key, String value) {
 		String[] parts = key.split("\\.");
 		Map<String, Object> current = root;
-
 		for (int i = 0; i < parts.length; i++) {
 			String part = parts[i];
 			boolean isLast = i == parts.length - 1;
-
 			// 处理数组：arr[0]
 			if (part.contains("[")) {
 				String arrayName = part.substring(0, part.indexOf("["));
 				int index = Integer.parseInt(part.substring(part.indexOf("[") + 1, part.indexOf("]")));
-
 				List<Object> array = getOrCreate(current, arrayName, List.class);
 				while (array.size() <= index) {
 					array.add(null);
 				}
-
 				if (isLast) {
 					array.set(index, value);
 				} else {
@@ -394,7 +378,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				}
 				return;
 			}
-
 			// 普通层级 a.b.c
 			if (isLast) {
 				current.put(part, value);
@@ -441,7 +424,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		if (fileName == null || fileName.isBlank()) {
 			return new LinkedHashMap<>();
 		}
-
 		try (InputStream inputStream = ResourceLoader.load(fileName)) {
 			// 文件不存在返回空Map
 			if (inputStream == null) {
@@ -464,7 +446,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		if (args == null || args.length == 0) {
 			return argsMap;
 		}
-
 		for (String arg : args) {
 			// 只处理--开头的参数
 			if (arg != null && arg.startsWith("--")) {
@@ -646,7 +627,6 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	private void instantiateEagerBeans() {
 		for (Entry<Class<?>, BeanDefinition> entry : beanDefinitionMap.entrySet()) {
-
 			Class<?> key = entry.getKey();
 			BeanDefinition value = entry.getValue();
 			if (value.isEager()) {

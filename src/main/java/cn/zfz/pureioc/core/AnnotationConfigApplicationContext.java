@@ -8,14 +8,17 @@ import cn.zfz.pureioc.annotations.ConditionalOnPropertity;
 import cn.zfz.pureioc.annotations.Configuration;
 import cn.zfz.pureioc.annotations.ConfigurationProperties;
 import cn.zfz.pureioc.annotations.Eager;
+import cn.zfz.pureioc.annotations.Extension;
 import cn.zfz.pureioc.annotations.Imports;
 import cn.zfz.pureioc.core.extension.BeanFactory;
 import cn.zfz.pureioc.core.extension.BeanPostProcessor;
 import cn.zfz.pureioc.core.extension.BeanFactoryAnnotationMatcher;
-import cn.zfz.pureioc.core.extension.NetworkEnvironmentLoader;
-import cn.zfz.pureioc.core.extension.Plugin;
+import cn.zfz.pureioc.core.extension.EnvironmentLoader;
+import cn.zfz.pureioc.core.extension.EnvironmentPostProcessor;
+import cn.zfz.pureioc.core.spi.Plugin;
 import cn.zfz.pureioc.utils.AnnotationUtils;
 import cn.zfz.pureioc.utils.NestedMapUtils;
+import cn.zfz.pureioc.utils.ResourceLoader;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -31,10 +34,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import org.yaml.snakeyaml.Yaml;
+
 public class AnnotationConfigApplicationContext implements LifeCycleApplicationContext {
 
-	private static final String BASE_CONFIG = "app.yml";
+	private static final String ENV = "env";
 
+	private static final char POINT = '.';
+
+	private static final String EMPTY = "";
+
+	private static final String LINE = "-";
+
+	private static final String YML = ".yml";
+
+	private static final String APP = "app";
+
+	private static final String BASE_CONFIG_FILE = "app.yml";
+
+	private static final Yaml YAML = new Yaml();
 	private AtomicBoolean refresh = new AtomicBoolean(false);
 
 	private AtomicBoolean preheatComplete = new AtomicBoolean(false);
@@ -69,8 +87,16 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private Map<Class<?>, Object> configurationMap = new ConcurrentHashMap<>();
 
 	private Map<Class<? extends BeanFactory>, BeanFactory> beanFactoryMap = new ConcurrentHashMap<>();
-	
+
 	private Environment environment = new LocalEnvironment(env);
+
+	{
+		beanAnnotationClasses.add(Bean.class);
+		beanAnnotationClasses.add(Component.class);
+		beanAnnotationClasses.add(ConfigurationProperties.class);
+		beanAnnotationClasses.add(Configuration.class);
+		beanAnnotationClasses.add(Extension.class);
+	}
 
 	@Override
 	public void setMaincClass(Class<?> maincClass) {
@@ -90,9 +116,11 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			loadPlugin();
 			loadPluginClasses();
 			loadNetworkEnvironment();
+
 			collectFactoryBeanMatchers();
-			collectBeanFactoryAndAnnotation();
+			collectBeanFactoryAndAnnotations();
 			scanPackageClasses();
+			postProcessEnvironment();
 			collectBeanPostProcessors();
 			registerBeanDefinitions();
 			registerApplicationContext();
@@ -104,20 +132,80 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		}
 	}
 
+	private void postProcessEnvironment() {
+		for (Class<?> clazz : pluginClasses) {
+			if (EnvironmentPostProcessor.class.isAssignableFrom(clazz)) {
+				try {
+					EnvironmentPostProcessor environmentPostProcessor = (EnvironmentPostProcessor) clazz
+							.getConstructor().newInstance();
+					environmentPostProcessor.postProcess(environment);
+				} catch (Exception e) {
+					throw IocException.of(e);
+				}
+
+			}
+		}
+
+		for (Class<?> clazz : applicationClasses) {
+			if (EnvironmentPostProcessor.class.isAssignableFrom(clazz)) {
+				try {
+					EnvironmentPostProcessor environmentPostProcessor = (EnvironmentPostProcessor) clazz
+							.getConstructor().newInstance();
+					environmentPostProcessor.postProcess(environment);
+				} catch (Exception e) {
+					throw IocException.of(e);
+				}
+			}
+		}
+
+	}
+
 	private void loadNetworkEnvironment() {
 		Environment environment = new LocalEnvironment(env);
-		List<Class<?>> list = pluginClasses.stream().filter(ele->NetworkEnvironmentLoader.class.isAssignableFrom(ele)).collect(Collectors.toList());
+		List<Class<?>> list = pluginClasses.stream().filter(ele -> EnvironmentLoader.class.isAssignableFrom(ele))
+				.collect(Collectors.toList());
 		for (Class<?> networkEnvironmentLoaderClass : list) {
 			try {
-				NetworkEnvironmentLoader loader = (NetworkEnvironmentLoader) networkEnvironmentLoaderClass.getConstructor().newInstance();
-				Map<String, String> networkMap = loader.load(environment);
-				ConfigLoader.applyFlatArgsToNestedMap( env,networkMap);
+				EnvironmentLoader loader = (EnvironmentLoader) networkEnvironmentLoaderClass.getConstructor()
+						.newInstance();
+				Map<String, Object> networkMap = loader.load(environment);
+				deepMerge(env, networkMap);
 			} catch (Exception e) {
 				throw IocException.of(e);
 			}
-			
+
 		}
 
+	}
+
+	/**
+	 * 深度合并两个嵌套Map： 1. Map类型递归合并 2. List类型追加合并 3. 基础类型直接覆盖
+	 */
+	@SuppressWarnings("unchecked")
+	private void deepMerge(Map<String, Object> target, Map<String, Object> source) {
+		for (Map.Entry<String, Object> entry : source.entrySet()) {
+			String key = entry.getKey();
+			Object sourceValue = entry.getValue();
+			Object targetValue = target.get(key);
+
+			// 跳过null值（避免覆盖已有有效值）
+			if (sourceValue == null) {
+				continue;
+			}
+
+			// 场景1：目标和源都是Map → 递归合并
+			if (targetValue instanceof Map && sourceValue instanceof Map) {
+				deepMerge((Map<String, Object>) targetValue, (Map<String, Object>) sourceValue);
+			}
+			// 场景2：目标和源都是List → 追加合并
+			else if (targetValue instanceof List && sourceValue instanceof List) {
+				((List<Object>) targetValue).addAll((List<Object>) sourceValue);
+			}
+			// 场景3：基础类型/其他类型 → 直接覆盖
+			else {
+				target.put(key, sourceValue);
+			}
+		}
 	}
 
 	private void registerShutdownHook() {
@@ -204,7 +292,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		}
 	}
 
-	private void collectBeanFactoryAndAnnotation() {
+	private void collectBeanFactoryAndAnnotations() {
 		for (BeanFactoryAnnotationMatcher factoryBeanMatcher : beanFactoryAnnotationMatchers) {
 			beanAnnotationClasses.add(factoryBeanMatcher.getBeanAnnotationClass());
 			beanFactoryClasses.add(factoryBeanMatcher.getBeanAnnotationClass());
@@ -215,14 +303,20 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		for (Plugin plugin : plugins) {
 			List<Class<?>> loadClasses = plugin.registerBeanClasses();
 			for (Class<?> loadClass : loadClasses) {
-				pluginClasses.add(loadClass);
-				if (loadClass.isAnnotationPresent(Imports.class)
-						&& loadClass.isAnnotationPresent(Configuration.class)) {
-					Imports imports = loadClass.getAnnotation(Imports.class);
-					for (Class<?> clazz : imports.value()) {
-						pluginClasses.add(clazz);
+				if (isAnnotationClass(loadClass)) {
+					pluginClasses.add(loadClass);
+					if (loadClass.isAnnotationPresent(Imports.class)
+							&& loadClass.isAnnotationPresent(Configuration.class)) {
+						Imports imports = loadClass.getAnnotation(Imports.class);
+						for (Class<?> clazz : imports.value()) {
+							if (isAnnotationClass(clazz)) {
+								pluginClasses.add(clazz);
+							}
+
+						}
 					}
 				}
+
 			}
 		}
 	}
@@ -231,12 +325,167 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	// 加载配置
 	// ==========================
 	private void loadEnvironment() {
-		env = ConfigLoader.loadConfig(BASE_CONFIG, args);
+		// 1. 加载基础配置 app.yml
+		Map<String, Object> ymlConfig = loadYamlResource(BASE_CONFIG_FILE);
+		env.putAll(ymlConfig);
+		// 启动参数扁平化map
+		Map<String, String> argsMap = parseMainArguments(args);
+		// 转嵌套map
+		Map<String, Object> nestedArgsMap = flatMapToNestedMap(argsMap);
+		// 启动参数覆盖所有配置
+		deepMerge(env, nestedArgsMap);
+		// 确定激活的环境（命令行优先，其次是配置文件）
+		String activeProfile = determineActiveProfile();
+
+		// 加载并合并环境配置 application-{active}.yml
+		if (isNotEmpty(activeProfile)) {
+			String envConfigFile = APP + LINE + activeProfile + YML;
+			Map<String, Object> envConfig = loadYamlResource(envConfigFile);
+			// 活动参数覆盖所有配置
+			deepMerge(env, envConfig);
+			// 启动参数覆盖所有配置（最高优先级）
+			deepMerge(env, nestedArgsMap);
+		}
+
+	}
+
+	private boolean isNotEmpty(String activeProfile) {
+		return activeProfile != null && activeProfile != EMPTY;
+	}
+
+	/**
+	 * 把 k=v 格式的启动参数转换成 嵌套 Map<String, Object> 支持： key=value a.b.c=123 arr[0]=aaa
+	 * arr[1]=bbb
+	 */
+	private Map<String, Object> flatMapToNestedMap(Map<String, String> args) {
+		Map<String, Object> root = new HashMap<>();
+		for (Map.Entry<String, String> entry : args.entrySet()) {
+			String key = entry.getKey();
+			String value = entry.getValue();
+			put(root, key, value);
+		}
+		return root;
+	}
+
+	@SuppressWarnings("unchecked")
+	private void put(Map<String, Object> root, String key, String value) {
+		String[] parts = key.split("\\.");
+		Map<String, Object> current = root;
+
+		for (int i = 0; i < parts.length; i++) {
+			String part = parts[i];
+			boolean isLast = i == parts.length - 1;
+
+			// 处理数组：arr[0]
+			if (part.contains("[")) {
+				String arrayName = part.substring(0, part.indexOf("["));
+				int index = Integer.parseInt(part.substring(part.indexOf("[") + 1, part.indexOf("]")));
+
+				List<Object> array = getOrCreate(current, arrayName, List.class);
+				while (array.size() <= index) {
+					array.add(null);
+				}
+
+				if (isLast) {
+					array.set(index, value);
+				} else {
+					Map<String, Object> node = getOrCreate(array, index, Map.class);
+					current = node;
+				}
+				return;
+			}
+
+			// 普通层级 a.b.c
+			if (isLast) {
+				current.put(part, value);
+			} else {
+				current = getOrCreate(current, part, Map.class);
+			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T> T getOrCreate(Map<String, Object> map, String key, Class<T> type) {
+		Object obj = map.get(key);
+		if (obj == null) {
+			obj = type == Map.class ? new HashMap<String, Object>() : new ArrayList<>();
+			map.put(key, obj);
+		}
+		return (T) obj;
+	}
+
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private Map<String, Object> getOrCreate(List<Object> list, int index, Class<Map> type) {
+		while (list.size() <= index) {
+			list.add(null);
+		}
+		Object obj = list.get(index);
+		if (obj == null) {
+			obj = new HashMap<String, Object>();
+			list.set(index, obj);
+		}
+		return (Map<String, Object>) obj;
+	}
+
+	private String determineActiveProfile() {
+		EnvironmentProperties environmentProperties = NestedMapUtils.loadAs(env, ENV, EnvironmentProperties.class);
+		String active = environmentProperties.getActive();
+		return active == null ? null : active.trim();
+	}
+
+	/**
+	 * 从类路径加载YAML文件，返回嵌套Map（空安全）
+	 */
+	private Map<String, Object> loadYamlResource(String fileName) {
+		// 空文件直接返回空Map
+		if (fileName == null || fileName.isBlank()) {
+			return new LinkedHashMap<>();
+		}
+
+		try (InputStream inputStream = ResourceLoader.load(fileName)) {
+			// 文件不存在返回空Map
+			if (inputStream == null) {
+				return new LinkedHashMap<>();
+			}
+			// 解析YAML（SnakeYAML返回null表示空文件）
+			Map<String, Object> yamlMap = YAML.load(inputStream);
+			return yamlMap == null ? new LinkedHashMap<>() : yamlMap;
+		} catch (Exception e) {
+			throw IocException.of(e);
+		}
+	}
+
+	/**
+	 * 解析main启动参数：--key=value → 扁平Map
+	 */
+	private Map<String, String> parseMainArguments(String[] args) {
+		Map<String, String> argsMap = new HashMap<>();
+		// 空参数直接返回
+		if (args == null || args.length == 0) {
+			return argsMap;
+		}
+
+		for (String arg : args) {
+			// 只处理--开头的参数
+			if (arg != null && arg.startsWith("--")) {
+				String[] kv = arg.substring(2).split("=", 2);
+				// 确保是合法的key=value格式
+				if (kv.length == 2 && kv[0] != null && kv[1] != null) {
+					String key = kv[0].trim();
+					String value = kv[1].trim();
+					// 跳过空key
+					if (!key.isBlank()) {
+						argsMap.put(key, value);
+					}
+				}
+			}
+		}
+		return argsMap;
 	}
 
 	private void scanPackageClasses() {
 		String pkg = maincClass.getPackageName();
-		String path = pkg.replace('.', '/');
+		String path = pkg.replace(POINT, '/');
 		try {
 			Enumeration<URL> urls = getClass().getClassLoader().getResources(path);
 			while (urls.hasMoreElements()) {
@@ -249,11 +498,11 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		}
 	}
 
-	private void scanDir(java.io.File dir, String pkg) {
+	private void scanDir(File dir, String pkg) {
 		if (!dir.isDirectory()) {
 			return;
 		}
-		java.io.File[] files = dir.listFiles();
+		File[] files = dir.listFiles();
 		if (files == null) {
 			return;
 		}
@@ -262,7 +511,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				scanDir(classFile, pkg + "." + classFile.getName());
 			} else if (classFile.getName().endsWith(".class")) {
 				byte[] classBytes = readClassBytes(classFile);
-				String className = pkg + "." + classFile.getName().replace(".class", "");
+				String className = pkg + "." + classFile.getName().replace(".class", EMPTY);
 
 				if (isAnnotationClass(classBytes)) {
 					try {
@@ -277,17 +526,16 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	}
 
 	private byte[] readClassBytes(File classFile) {
-		try (InputStream in = new FileInputStream(classFile);
-	             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-	            byte[] buf = new byte[8192];
-	            int len;
-	            while ((len = in.read(buf)) != -1) {
-	                out.write(buf, 0, len);
-	            }
-	            return out.toByteArray();
-	        } catch (IOException e) {
-	            throw IocException.of(e);
-	        }
+		try (InputStream in = new FileInputStream(classFile); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			byte[] buf = new byte[8192];
+			int len;
+			while ((len = in.read(buf)) != -1) {
+				out.write(buf, 0, len);
+			}
+			return out.toByteArray();
+		} catch (IOException e) {
+			throw IocException.of(e);
+		}
 	}
 
 	private boolean isAnnotationClass(byte[] classBytes) {
@@ -354,8 +602,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			for (BeanFactoryAnnotationMatcher factoryBeanMatcher : beanFactoryAnnotationMatchers) {
 				if (clazz.isAnnotationPresent(factoryBeanMatcher.getBeanAnnotationClass())) {
 					boolean eager = getEager(clazz);
-					beanDefinitionMap.putIfAbsent(clazz,
-							new ClassBeanDefinition(clazz, eager));
+					beanDefinitionMap.putIfAbsent(clazz, new ClassBeanDefinition(clazz, eager));
 				}
 			}
 		}
@@ -525,7 +772,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private Object createInterfaceBean(Class<?> beanClass, Class<? extends BeanFactory> beanFactoryClass) {
 		Object instance;
 		BeanFactory beanFactoryInstance = getBeanFactory(beanFactoryClass);
-		instance = beanFactoryInstance.createBean(this,beanClass);
+		instance = beanFactoryInstance.createBean(this, beanClass);
 		return instance;
 	}
 
@@ -539,11 +786,13 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		return instance;
 	}
 
-	private Object createClassBean(Class<?> beanClass) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {			Constructor<?> ctor = beanClass.getConstructors()[0];
-			Object[] args = resolveArgs(ctor.getParameterTypes());
-			Object instance = ctor.newInstance(args);
-			return instance;
-		
+	private Object createClassBean(Class<?> beanClass)
+			throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		Constructor<?> ctor = beanClass.getConstructors()[0];
+		Object[] args = resolveArgs(ctor.getParameterTypes());
+		Object instance = ctor.newInstance(args);
+		return instance;
+
 	}
 
 	private Object createPropertiesBean(Class<?> beanClass) {

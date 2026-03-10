@@ -1,4 +1,4 @@
-package cn.zfz.pureioc.core.extension;
+package cn.zfz.pureioc.core.spi;
 import java.util.List;
 
 import cn.zfz.pureioc.core.ExtensionPoint;

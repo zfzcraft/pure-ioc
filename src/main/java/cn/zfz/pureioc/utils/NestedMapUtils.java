@@ -27,6 +27,7 @@ public class NestedMapUtils {
 		return current;
 	}
 	
+	
 	public static <T> T loadAs(Map<String, Object> root, String prefix, Class<T> clazz) {
 
 		// 2. 按 . 路径递归取值

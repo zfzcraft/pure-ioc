@@ -634,7 +634,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			Class<?> key = entry.getKey();
 			BeanDefinition value = entry.getValue();
 			if (value.isEager()) {
-				createBean(key);
+				getBean(key);
 			}
 		}
 	}
@@ -642,50 +642,39 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T getBean(Class<T> clazz) {
-		Class<T> targetClass = clazz;
-		if (!isUsableBeanClass(clazz)) {
-			throw IocException.of("Class must be interface or instantiable class");
+		Object bean = singletonPool.get(clazz);
+		if (bean != null) {
+			return (T) bean;
 		}
-		if (preheatComplete.get() == true) {
-			if (clazz.isInterface()) {
-				List<T> beans = getBeansOfType(clazz);
-				if (beans.isEmpty()) {
-					throw IocException.of("No such BeanDefinition");
-				} else if (beans.size() > 1) {
-					throw IocException.of("Too Many BeanDefinition");
-				} else {
-					return beans.get(0);
-				}
-			} else {
-				T bean = (T) singletonPool.computeIfAbsent(clazz, func -> {
-					return createBean(clazz);
-				});
-				if (Objects.isNull(bean)) {
-					throw IocException.of("No such BeanDefinition");
-				}
-				return bean;
+		synchronized (singletonPool) {
+			if (bean == null) {
+				bean = checkAndCreateBean(clazz);
+				singletonPool.put(clazz, bean);
 			}
-		} else {
-			if (clazz.isInterface()) {
-				List<Class<T>> keys = getImplementations(clazz);
-				if (keys.isEmpty()) {
-					throw IocException.of("No such BeanDefinition:" + clazz.getName());
-				} else if (keys.size() > 1) {
-					throw IocException.of("Too Many BeanDefinition");
-				} else {
-					targetClass = (Class<T>) keys.get(0);
-				}
-			}
-			final Class<T> beanClass = targetClass;
-			T bean = (T) singletonPool.computeIfAbsent(beanClass, func -> {
-				return createBean(beanClass);
-			});
+		}
+		return (T) bean;
 
-			if (Objects.isNull(bean)) {
-				throw IocException.of("No such BeanDefinition");
-			}
-			return bean;
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T> T checkAndCreateBean(Class<T> clazz) {
+		if (!isUsableBeanClass(clazz)) {
+			throw IocException.of("Class must be interface or instantiable class:" + clazz.getName());
 		}
+		if (clazz.isInterface()) {
+			List<Class<T>> keys = getImplementations(clazz);
+			if (keys.isEmpty()) {
+				throw IocException.of("No such BeanDefinition:" + clazz.getName());
+			} else if (keys.size() > 1) {
+				throw IocException.of("Too Many BeanDefinition");
+			}
+		}
+		Object bean = createBean(clazz);
+		if (Objects.isNull(bean)) {
+			throw IocException.of("No such BeanDefinition:" + clazz.getName());
+		}
+		return (T) bean;
+
 	}
 
 	@SuppressWarnings("unchecked")
@@ -890,7 +879,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	@Override
 	public <T> List<T> getBeansOfType(Class<T> interfaceClass) {
 		if (!interfaceClass.isInterface()) {
-			throw IocException.of("Class must be interface");
+			throw IocException.of("Class must be interface:"+interfaceClass.getName());
 		}
 		List<Class<T>> keys = getImplementations(interfaceClass);
 		List<T> list = new ArrayList<>();
@@ -945,7 +934,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				} else if (classes.size() == 1) {
 					return true;
 				} else {
-					throw IocException.of("Too Many BeanDefinition");
+					throw IocException.of("Too Many BeanDefinition:"+key.getName());
 				}
 			} else {
 				BeanDefinition beanDefinition = beanDefinitionMap.get(key);

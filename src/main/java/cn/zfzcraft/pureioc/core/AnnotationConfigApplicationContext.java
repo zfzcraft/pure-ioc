@@ -34,7 +34,6 @@ import cn.zfzcraft.pureioc.core.extension.EnvironmentPostProcessor;
 import cn.zfzcraft.pureioc.core.spi.Plugin;
 import cn.zfzcraft.pureioc.utils.AnnotationUtils;
 import cn.zfzcraft.pureioc.utils.NestedMapUtils;
-import cn.zfzcraft.pureioc.utils.ResourceLoader;
 
 public class AnnotationConfigApplicationContext implements LifeCycleApplicationContext {
 

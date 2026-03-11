@@ -123,7 +123,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			postProcessEnvironment();
 			collectBeanPostProcessors();
 			registerBeanDefinitions();
-			registerApplicationContext();
+			registerFrameworkCompoment();
 			instantiateBeanPostProcessors();
 			instantiateEagerBeans();
 			System.out.println("启动容器成功............");
@@ -236,9 +236,11 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		applicationClasses = null;
 	}
 
-	private void registerApplicationContext() {
+	private void registerFrameworkCompoment() {
 		beanDefinitionMap.putIfAbsent(ApplicationContext.class, new ClassBeanDefinition(this.getClass(), false));
 		singletonPool.putIfAbsent(ApplicationContext.class, this);
+		beanDefinitionMap.putIfAbsent(Environment.class, new ClassBeanDefinition(LocalEnvironment.class, false));
+		singletonPool.putIfAbsent(Environment.class, environment);
 	}
 
 	private void asyncInstantiateLazyBeansAndClearResources() {
@@ -734,9 +736,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				Class<? extends BeanFactory> beanFactoryClass = interfaceBeanDefinition.getBeanFactory();
 				instance = createInterfaceBean(beanClass, beanFactoryClass);
 			}
-			if (instance instanceof InitializingBean) {
-				((InitializingBean) instance).afterPropertiesSet();
-			}
+			
 			for (BeanPostProcessor beanPostProcessor : beanPostProcessors) {
 				if (beanPostProcessor.matche(clazz)) {
 					instance = beanPostProcessor.postProcess(this, instance);

@@ -3,8 +3,10 @@ package cn.zfz.pureioc.core;
 import java.util.List;
 import java.util.Set;
 
+import cn.zfz.pureioc.core.compoments.FrameworkCompoment;
 
-public interface ApplicationContext{
+
+public interface ApplicationContext extends FrameworkCompoment{
 
 	Environment getEnvironment();
 	

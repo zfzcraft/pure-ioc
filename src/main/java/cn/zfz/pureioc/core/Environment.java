@@ -1,6 +1,8 @@
 package cn.zfz.pureioc.core;
 
-public interface Environment {
+import cn.zfz.pureioc.core.compoments.FrameworkCompoment;
+
+public interface Environment extends FrameworkCompoment{
 	
 	Object getProperty(String key);
 

@@ -52,7 +52,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private static final String BASE_CONFIG_FILE = "app.yml";
 
 	private static final Yaml YAML = new Yaml();
-	
+
 	private AtomicBoolean refresh = new AtomicBoolean(false);
 
 	private AtomicBoolean preheatComplete = new AtomicBoolean(false);
@@ -69,7 +69,9 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	List<Class<?>> applicationClasses = new ArrayList<>();
 
-	List<Class<?>> pluginClasses = new ArrayList<>();
+	Set<Class<?>> tempPluginClasses = new HashSet<>();
+
+	Set<Class<?>> pluginClasses = new HashSet<>();
 
 	List<Class<? extends Annotation>> beanAnnotationClasses = new ArrayList<>();
 
@@ -293,23 +295,24 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	private void loadPluginClasses() {
 		for (Plugin plugin : plugins) {
-			List<Class<?>> loadClasses = plugin.registerBeanClasses();
-			for (Class<?> loadClass : loadClasses) {
-				if (isAnnotationClass(loadClass)) {
-					pluginClasses.add(loadClass);
-					if (loadClass.isAnnotationPresent(Imports.class)
-							&& loadClass.isAnnotationPresent(Configuration.class)) {
-						Imports imports = loadClass.getAnnotation(Imports.class);
-						for (Class<?> clazz : imports.value()) {
-							if (isAnnotationClass(clazz)) {
-								pluginClasses.add(clazz);
-							}
-
+			plugin.registerBeanClasses(tempPluginClasses);
+		}
+		for (Class<?> loadClass : tempPluginClasses) {
+			if (isAnnotationClass(loadClass)) {
+				pluginClasses.add(loadClass);
+				if (loadClass.isAnnotationPresent(Imports.class)
+						&& loadClass.isAnnotationPresent(Configuration.class)) {
+					Imports imports = loadClass.getAnnotation(Imports.class);
+					for (Class<?> clazz : imports.value()) {
+						if (isAnnotationClass(clazz)) {
+							pluginClasses.add(clazz);
 						}
+
 					}
 				}
 			}
 		}
+
 	}
 
 	// ==========================
@@ -735,7 +738,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				Class<? extends BeanFactory> beanFactoryClass = interfaceBeanDefinition.getBeanFactory();
 				instance = createInterfaceBean(beanClass, beanFactoryClass);
 			}
-			
+
 			for (BeanPostProcessor beanPostProcessor : beanPostProcessors) {
 				if (beanPostProcessor.matche(clazz)) {
 					instance = beanPostProcessor.postProcess(this, instance);

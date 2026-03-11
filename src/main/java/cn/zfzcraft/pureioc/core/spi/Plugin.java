@@ -1,5 +1,5 @@
 package cn.zfzcraft.pureioc.core.spi;
-import java.util.List;
+import java.util.Set;
 
 import cn.zfzcraft.pureioc.core.ExtensionPoint;
 
@@ -8,6 +8,6 @@ import cn.zfzcraft.pureioc.core.ExtensionPoint;
  */
 public interface Plugin  extends ExtensionPoint{
 	
-    List<Class<?>> registerBeanClasses();
+  void   registerBeanClasses(Set<Class<?>> pluginClasses);
     
 }

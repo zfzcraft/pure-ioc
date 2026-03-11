@@ -7,14 +7,17 @@ import cn.zfz.pureioc.core.ExtensionPoint;
 /**
  * must be no args constructor
  */
-public interface BeanFactoryAnnotationMatcher extends ExtensionPoint{
+public interface BeanFactoryAnnotationMatcher extends ExtensionPoint {
+
+	Class<? extends BeanFactory> DEFAULT_NULL_FACTORY = null;
 
 	/**
 	 * for interface class ,must return a BeanFactoryClass
+	 * 
 	 * @return
 	 */
 	default Class<? extends BeanFactory> getBeanFactoryClass() {
-		return null;
+		return DEFAULT_NULL_FACTORY;
 	}
 
 	Class<? extends Annotation> getBeanAnnotationClass();

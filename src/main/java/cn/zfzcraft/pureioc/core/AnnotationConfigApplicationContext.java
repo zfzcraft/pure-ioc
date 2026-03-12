@@ -20,9 +20,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.yaml.snakeyaml.Yaml;
-
 import cn.zfzcraft.pureioc.annotations.Bean;
 import cn.zfzcraft.pureioc.annotations.Component;
 import cn.zfzcraft.pureioc.annotations.ConditionalOnClass;
@@ -92,6 +90,8 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
 	private Map<Class<?>, BeanDefinition> beanDefinitionMap = new HashMap<>();
+	
+	private Set<Class<?>> beanClassSet = new HashSet<>();
 
 	private final Map<Class<?>, Object> singletonPool = new ConcurrentHashMap<>();
 
@@ -122,75 +122,38 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	@Override
 	public void refresh() {
 		if (refresh.compareAndSet(false, true)) {
-			System.out.println("开始启动容器............");
-			long begin = System.currentTimeMillis();
+			
+			
 			loadEnvironment();
-			long current = System.currentTimeMillis();
-			System.out.println("loadEnvironment:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			loadPlugin();
-			current = System.currentTimeMillis();
-			System.out.println("loadPlugin:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			loadPluginClasses();
-			current = System.currentTimeMillis();
-			System.out.println("loadPluginClasses:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			loadNetworkEnvironment();
-			current = System.currentTimeMillis();
-			System.out.println("loadNetworkEnvironment:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			collectFactoryBeanMatchers();
-			current = System.currentTimeMillis();
-			System.out.println("collectFactoryBeanMatchers:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			collectBeanFactoryAndAnnotations();
-			current = System.currentTimeMillis();
-			System.out.println("collectBeanFactoryAndAnnotations:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			scanPackageClasses();
-			current = System.currentTimeMillis();
-			System.out.println("scanPackageClasses:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			postProcessEnvironment();
-			current = System.currentTimeMillis();
-			System.out.println("postProcessEnvironment:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			collectBeanPostProcessors();
-			current = System.currentTimeMillis();
-			System.out.println("collectBeanPostProcessors:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			registerBeanDefinitions();
-			current = System.currentTimeMillis();
-			System.out.println("registerBeanDefinitions:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			registerFrameworkCompoment();
-			current = System.currentTimeMillis();
-			System.out.println("registerFrameworkCompoment:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			instantiateBeanPostProcessors();
-			current = System.currentTimeMillis();
-			System.out.println("instantiateBeanPostProcessors:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			instantiateEagerBeans();
-			current = System.currentTimeMillis();
-			System.out.println("instantiateEagerBeans:" + (current - begin));
-
-			begin = System.currentTimeMillis();
+			
 			System.out.println("启动容器成功............");
+			
 			asyncInstantiateLazyBeansAndClearResources();
+			
 			registerShutdownHook();
 		}
 	}
@@ -302,8 +265,10 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private void registerFrameworkCompoment() {
 		beanDefinitionMap.putIfAbsent(ApplicationContext.class, new ClassBeanDefinition(this.getClass(), false));
 		singletonPool.putIfAbsent(ApplicationContext.class, this);
+		beanClassSet.add(ApplicationContext.class);
 		beanDefinitionMap.putIfAbsent(Environment.class, new ClassBeanDefinition(LocalEnvironment.class, false));
 		singletonPool.putIfAbsent(Environment.class, environment);
+		beanClassSet.add(Environment.class);
 	}
 
 	private void asyncInstantiateLazyBeansAndClearResources() {
@@ -532,14 +497,14 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	private void scanPackageClasses() {
 		if (ResourceLoader.getResource(BEANS_INDEX) != null) {
-			doScanIndex();
+			scanIndex();
 		} else {
-			doScan();
+			scanPackage();
 		}
 
 	}
 
-	private void doScanIndex() {
+	private void scanIndex() {
 		List<String> classNameList = readBeanIndex();
 		for (String className : classNameList) {
 			try {
@@ -552,7 +517,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	}
 
-	private void doScan() {
+	private void scanPackage() {
 		String pkg = maincClass.getPackageName();
 		String path = pkg.replace(POINT, '/');
 		try {
@@ -724,15 +689,18 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 					boolean eager = getEager(clazz);
 					beanDefinitionMap.putIfAbsent(clazz,
 							new InterfaceBeanDefinition(clazz, factoryBeanMatcher.getBeanFactoryClass(), eager));
+					beanClassSet.add(clazz);
 				}
 			}
 		}
 		if (clazz.isAnnotationPresent(Component.class) && isNormalClass(clazz)) {
 			boolean eager = getEager(clazz);
 			beanDefinitionMap.putIfAbsent(clazz, new ClassBeanDefinition(clazz, eager));
+			beanClassSet.add(clazz);
 		}
 		if (clazz.isAnnotationPresent(ConfigurationProperties.class) && isNormalClass(clazz)) {
 			beanDefinitionMap.putIfAbsent(clazz, new PropertiesBeanDefinition(clazz, false));
+			beanClassSet.add(clazz);
 		}
 		if (clazz.isAnnotationPresent(Configuration.class) && isNormalClass(clazz)) {
 			if (hasCondition(clazz)) {
@@ -748,6 +716,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 				if (clazz.isAnnotationPresent(factoryBeanMatcher.getBeanAnnotationClass())) {
 					boolean eager = getEager(clazz);
 					beanDefinitionMap.putIfAbsent(clazz, new ClassBeanDefinition(clazz, eager));
+					beanClassSet.add(clazz);
 				}
 			}
 		}
@@ -756,6 +725,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	private void registerConfigurationBeanDefinition(Class<?> clazz) {
 		boolean eager = getEager(clazz);
 		beanDefinitionMap.putIfAbsent(clazz, new ClassBeanDefinition(clazz, eager));
+		beanClassSet.add(clazz);
 		for (Method beanMethod : clazz.getDeclaredMethods()) {
 			if (hasCondition(beanMethod)) {
 				if (isConditionTrue(beanMethod)) {
@@ -772,6 +742,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			boolean eagerMethod = getEager(beanMethod);
 			Class<?> returnType = beanMethod.getReturnType();
 			beanDefinitionMap.putIfAbsent(returnType, new MethodBeanDefinition(clazz, beanMethod, eagerMethod));
+			beanClassSet.add(clazz);
 		}
 	}
 
@@ -1141,7 +1112,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 
 	@Override
 	public Set<Class<?>> getBeanClasses() {
-		return beanDefinitionMap.keySet();
+		return beanClassSet;
 	}
 
 	@Override

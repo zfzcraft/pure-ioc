@@ -7,12 +7,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.net.JarURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -36,6 +43,8 @@ import cn.zfzcraft.pureioc.utils.AnnotationUtils;
 import cn.zfzcraft.pureioc.utils.NestedMapUtils;
 
 public class AnnotationConfigApplicationContext implements LifeCycleApplicationContext {
+
+	private static String BEANS_INDEX = "META-INF/beans.index";
 
 	private static final String ENV = "env";
 
@@ -114,19 +123,72 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	public void refresh() {
 		if (refresh.compareAndSet(false, true)) {
 			System.out.println("开始启动容器............");
+			long begin = System.currentTimeMillis();
 			loadEnvironment();
+			long current = System.currentTimeMillis();
+			System.out.println("loadEnvironment:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			loadPlugin();
+			current = System.currentTimeMillis();
+			System.out.println("loadPlugin:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			loadPluginClasses();
+			current = System.currentTimeMillis();
+			System.out.println("loadPluginClasses:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			loadNetworkEnvironment();
+			current = System.currentTimeMillis();
+			System.out.println("loadNetworkEnvironment:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			collectFactoryBeanMatchers();
+			current = System.currentTimeMillis();
+			System.out.println("collectFactoryBeanMatchers:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			collectBeanFactoryAndAnnotations();
+			current = System.currentTimeMillis();
+			System.out.println("collectBeanFactoryAndAnnotations:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			scanPackageClasses();
+			current = System.currentTimeMillis();
+			System.out.println("scanPackageClasses:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			postProcessEnvironment();
+			current = System.currentTimeMillis();
+			System.out.println("postProcessEnvironment:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			collectBeanPostProcessors();
+			current = System.currentTimeMillis();
+			System.out.println("collectBeanPostProcessors:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			registerBeanDefinitions();
+			current = System.currentTimeMillis();
+			System.out.println("registerBeanDefinitions:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			registerFrameworkCompoment();
+			current = System.currentTimeMillis();
+			System.out.println("registerFrameworkCompoment:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			instantiateBeanPostProcessors();
+			current = System.currentTimeMillis();
+			System.out.println("instantiateBeanPostProcessors:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			instantiateEagerBeans();
+			current = System.currentTimeMillis();
+			System.out.println("instantiateEagerBeans:" + (current - begin));
+
+			begin = System.currentTimeMillis();
 			System.out.println("启动容器成功............");
 			asyncInstantiateLazyBeansAndClearResources();
 			registerShutdownHook();
@@ -469,45 +531,143 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	}
 
 	private void scanPackageClasses() {
+		if (ResourceLoader.getResource(BEANS_INDEX) != null) {
+			doScanIndex();
+		} else {
+			doScan();
+		}
+
+	}
+
+	private void doScanIndex() {
+		List<String> classNameList = readBeanIndex();
+		for (String className : classNameList) {
+			try {
+				Class<?> clazz = Class.forName(className);
+				applicationClasses.add(clazz);
+			} catch (Exception e) {
+				throw IocException.of(e);
+			}
+		}
+
+	}
+
+	private void doScan() {
 		String pkg = maincClass.getPackageName();
 		String path = pkg.replace(POINT, '/');
 		try {
-			Enumeration<URL> urls = getClass().getClassLoader().getResources(path);
+			Enumeration<URL> urls = ResourceLoader.getResources(path);
 			while (urls.hasMoreElements()) {
 				URL url = urls.nextElement();
-				File dir = new File(url.getFile());
-				scanDir(dir, pkg);
+				if ("file".equals(url.getProtocol())) {
+					// 本地文件系统：只遍历文件名，不读字节
+					scanDirByFileName(new File(url.getFile()), pkg);
+				} else if ("jar".equals(url.getProtocol())) {
+					// 兼容jar包运行场景（之前的代码完全不支持）
+					scanJarByFileName(url, pkg);
+				}
 			}
 		} catch (Exception e) {
 			throw IocException.of(e);
 		}
+
 	}
 
-	private void scanDir(File dir, String pkg) {
+	/**
+	 * 读取 META-INF/beans.index 返回全类名列表
+	 */
+	public List<String> readBeanIndex() {
+
+		// 正确！从 ClassLoader 读取，兼容一切环境
+		try (InputStream is = ResourceLoader.getResourceAsStream(BEANS_INDEX)) {
+
+			// 一次性读完，最快、最少IO、最小内存
+			byte[] bytes = is.readAllBytes();
+
+			List<String> classNames = new ArrayList<>(1024); // 预指定容量，零扩容
+			int lineStart = 0;
+
+			for (int i = 0; i < bytes.length; i++) {
+				if (bytes[i] == '\n') {
+					// 直接截字节，不构造大String，最快
+					String line = new String(bytes, lineStart, i - lineStart, StandardCharsets.UTF_8);
+					classNames.add(line.strip()); // 只去空白，不做多余处理
+					lineStart = i + 1;
+				}
+			}
+			return classNames;
+
+		} catch (IOException e) {
+			throw IocException.of(e);
+		}
+	}
+
+	private void scanJarByFileName(URL url, String pkg) {
+		try {
+			JarURLConnection jarConn = (JarURLConnection) url.openConnection();
+			try (JarFile jarFile = jarConn.getJarFile()) {
+				Enumeration<JarEntry> entries = jarFile.entries();
+				while (entries.hasMoreElements()) {
+					JarEntry entry = entries.nextElement();
+					String entryName = entry.getName();
+					// 只处理目标包下的.class文件
+					if (entryName.startsWith(pkg) && entryName.endsWith(".class") && !entryName.contains("$")
+							&& !entryName.endsWith("package-info.class")) {
+						// 拼接全类名
+						String className = entryName.replace('/', '.').replace(".class", EMPTY);
+						try {
+							byte[] classBytes = jarFile.getInputStream(entry).readAllBytes();
+
+							if (isAnnotationClass(classBytes)) { // 替代isAnnotationClass
+								Class<?> clazz = Class.forName(className);
+								applicationClasses.add(clazz);
+							}
+						} catch (ClassNotFoundException | IOException e) {
+							throw IocException.of(e);
+						}
+					}
+				}
+			} catch (IOException e) {
+				throw IocException.of(e);
+			}
+		} catch (Exception e) {
+			throw IocException.of(e);
+		}
+
+	}
+
+	private void scanDirByFileName(File dir, String pkg) {
 		if (!dir.isDirectory()) {
 			return;
 		}
-		File[] files = dir.listFiles();
-		if (files == null) {
-			return;
-		}
-		for (File classFile : files) {
-			if (classFile.isDirectory()) {
-				scanDir(classFile, pkg + "." + classFile.getName());
-			} else if (classFile.getName().endsWith(".class")) {
-				byte[] classBytes = readClassBytes(classFile);
-				String className = pkg + "." + classFile.getName().replace(".class", EMPTY);
+		try (Stream<Path> pathStream = Files.walk(dir.toPath())) {
+			pathStream
+					// 只处理.class文件
+					.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".class"))
+					// 过滤内部类/无用类
+					.filter(p -> !p.getFileName().toString().contains("$"))
+					.filter(p -> !p.getFileName().toString().startsWith("package-info")).forEach(p -> {
+						// 拼接全类名（核心：只拼名字，不读文件）
+						String relativePath = dir.toPath().relativize(p).toString();
+						String className = pkg + "."
+								+ relativePath.replace(File.separatorChar, '.').replace(".class", EMPTY);
+						// 延迟加载类：先判断是否是注解类，再加载（避免无效加载）
+						try {
+							byte[] classBytes = readClassBytes(p.toFile());
 
-				if (isAnnotationClass(classBytes)) {
-					try {
-						Class<?> clazz = Class.forName(className);
-						applicationClasses.add(clazz);
-					} catch (Exception e) {
-						throw IocException.of(e);
-					}
-				}
-			}
+							if (isAnnotationClass(classBytes)) { // 替代isAnnotationClass
+								Class<?> clazz = Class.forName(className);
+								applicationClasses.add(clazz);
+							}
+						} catch (ClassNotFoundException e) {
+							// 忽略无法加载的类（如内部类/依赖缺失）
+							throw IocException.of(e);
+						}
+					});
+		} catch (IOException e) {
+			throw IocException.of(e);
 		}
+
 	}
 
 	private byte[] readClassBytes(File classFile) {
@@ -661,15 +821,18 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		if (!isUsableBeanClass(clazz)) {
 			throw IocException.of("Class must be interface or instantiable class:" + clazz.getName());
 		}
+		Class<?> targetClass = clazz;
 		if (clazz.isInterface()) {
 			List<Class<T>> keys = getImplementations(clazz);
 			if (keys.isEmpty()) {
 				throw IocException.of("No such BeanDefinition:" + clazz.getName());
 			} else if (keys.size() > 1) {
 				throw IocException.of("Too Many BeanDefinition");
+			} else {
+				targetClass = keys.get(0);
 			}
 		}
-		Object bean = createBean(clazz);
+		Object bean = createBean(targetClass);
 		if (Objects.isNull(bean)) {
 			throw IocException.of("No such BeanDefinition:" + clazz.getName());
 		}
@@ -842,11 +1005,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 			return false;
 		}
 		String resourceName = className.replace('.', '/') + ".class";
-		ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-		if (classLoader == null) {
-			classLoader = getClass().getClassLoader();
-		}
-		return classLoader.getResource(resourceName) != null;
+		return ResourceLoader.getResource(resourceName) != null;
 	}
 
 	private boolean matchesProperty(Map<String, Object> config, String propertyKey, Object havingValue) {
@@ -879,7 +1038,7 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 	@Override
 	public <T> List<T> getBeansOfType(Class<T> interfaceClass) {
 		if (!interfaceClass.isInterface()) {
-			throw IocException.of("Class must be interface:"+interfaceClass.getName());
+			throw IocException.of("Class must be interface:" + interfaceClass.getName());
 		}
 		List<Class<T>> keys = getImplementations(interfaceClass);
 		List<T> list = new ArrayList<>();
@@ -902,50 +1061,72 @@ public class AnnotationConfigApplicationContext implements LifeCycleApplicationC
 		return false;
 	}
 
-	private boolean isConditionTrue(AnnotatedElement annotatedElement) {
-		if (annotatedElement.isAnnotationPresent(ConditionalOnClass.class)) {
-			ConditionalOnClass conditionalOnClass = annotatedElement.getAnnotation(ConditionalOnClass.class);
+	private boolean isConditionTrue(Class<?> clazz) {
+
+		if (clazz.isAnnotationPresent(ConditionalOnClass.class)) {
+			ConditionalOnClass conditionalOnClass = clazz.getAnnotation(ConditionalOnClass.class);
 			String className = conditionalOnClass.className();
-			if (isClassPresent(className)) {
-				return true;
-			} else {
+			if (!isClassPresent(className)) {
+				return false;
+			}
+			if (clazz.isAnnotationPresent(ConditionalOnPropertity.class)) {
+				ConditionalOnPropertity conditionalOnPropertity = clazz.getAnnotation(ConditionalOnPropertity.class);
+				String key = conditionalOnPropertity.key();
+				String value = conditionalOnPropertity.value();
+				if (!matchesProperty(env, key, value)) {
+					return false;
+				}
+			}
+			if (clazz.isAnnotationPresent(ConditionalOnMissingBean.class)) {
+				if (clazz.isInterface()) {
+					List<Class<?>> classes = getImplementationCLasses(clazz);
+					if (!classes.isEmpty()) {
+						return false;
+					}
+				} else {
+					BeanDefinition beanDefinition = beanDefinitionMap.get(clazz);
+					if (!Objects.isNull(beanDefinition)) {
+						return false;
+					}
+				}
+
+			}
+		}
+		return true;
+	}
+
+	private boolean isConditionTrue(Method method) {
+		if (method.isAnnotationPresent(ConditionalOnClass.class)) {
+			ConditionalOnClass conditionalOnClass = method.getAnnotation(ConditionalOnClass.class);
+			String className = conditionalOnClass.className();
+			if (!isClassPresent(className)) {
 				return false;
 			}
 		}
-		if (annotatedElement.isAnnotationPresent(ConditionalOnPropertity.class)) {
-			ConditionalOnPropertity conditionalOnPropertity = annotatedElement
-					.getAnnotation(ConditionalOnPropertity.class);
+		if (method.isAnnotationPresent(ConditionalOnPropertity.class)) {
+			ConditionalOnPropertity conditionalOnPropertity = method.getAnnotation(ConditionalOnPropertity.class);
 			String key = conditionalOnPropertity.key();
 			String value = conditionalOnPropertity.value();
-			if (matchesProperty(env, key, value)) {
-				return true;
-			} else {
+			if (!matchesProperty(env, key, value)) {
 				return false;
 			}
 		}
-		if (annotatedElement.isAnnotationPresent(ConditionalOnMissingBean.class)) {
-			ConditionalOnMissingBean conditionalOnMissingBean = annotatedElement
-					.getAnnotation(ConditionalOnMissingBean.class);
-			Class<?> key = conditionalOnMissingBean.beanClass();
+		if (method.isAnnotationPresent(ConditionalOnMissingBean.class)) {
+
+			Class<?> key = method.getReturnType();
 			if (key.isInterface()) {
 				List<Class<?>> classes = getImplementationCLasses(key);
-				if (classes.isEmpty()) {
+				if (!classes.isEmpty()) {
 					return false;
-				} else if (classes.size() == 1) {
-					return true;
-				} else {
-					throw IocException.of("Too Many BeanDefinition:"+key.getName());
 				}
 			} else {
 				BeanDefinition beanDefinition = beanDefinitionMap.get(key);
-				if (Objects.isNull(beanDefinition)) {
+				if (!Objects.isNull(beanDefinition)) {
 					return false;
-				} else {
-					return true;
 				}
 			}
 		}
-		return false;
+		return true;
 	}
 
 	private List<Class<?>> getImplementationCLasses(Class<?> clazz) {

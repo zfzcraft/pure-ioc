@@ -49,7 +49,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 
 	private AtomicBoolean preheated = new AtomicBoolean(false);
 
-	private Class<?> maincClass;
+	private Class<?> mainClass;
 
 	private String[] args;
 
@@ -75,8 +75,8 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	private Set<Class<?>> creatingBeans = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
 	@Override
-	public void setMaincClass(Class<?> maincClass) {
-		this.maincClass = maincClass;
+	public void setMainClass(Class<?> mainClass) {
+		this.mainClass = mainClass;
 	}
 
 	@Override
@@ -230,7 +230,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 
 	private void registerShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			destory();
+			destroy();
 		}));
 	}
 
@@ -288,7 +288,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	}
 
 	private void scanPackage() {
-		List<String> classList = ClassIndexParser.scanByPackage(maincClass.getPackageName(), beanFactoryMap.keySet());
+		List<String> classList = ClassIndexParser.scanByPackage(mainClass.getPackageName(), beanFactoryMap.keySet());
 		applicationClassNameList.addAll(classList);
 	}
 
@@ -368,29 +368,42 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T getBean(Class<T> clazz) {
-		Object bean = singletonPool.get(clazz);
+		Class<?> resolvedClass = resolveBeanClass(clazz);
+		Object bean = singletonPool.get(resolvedClass);
 		if (bean != null) {
 			return (T) bean;
 		}
-		synchronized (clazz) {
-			bean = singletonPool.get(clazz);
+		synchronized (resolvedClass) {
+			bean = singletonPool.get(resolvedClass);
 			if (bean == null) {
-				if (creatingBeans.contains(clazz)) {
-					throw new ConstructorCircularDependencyError("Constructor Circular Dependency Error on Class :" + clazz);
+				if (creatingBeans.contains(resolvedClass)) {
+					throw new ConstructorCircularDependencyError("Constructor Circular Dependency Error on Class :" + resolvedClass);
 				}
-				creatingBeans.add(clazz);
+				creatingBeans.add(resolvedClass);
 				bean = createBean(clazz);
-				singletonPool.put(clazz, bean);
+				singletonPool.put(resolvedClass, bean);
 			}
 		}
 		return (T) bean;
+	}
+
+	private Class<?> resolveBeanClass(Class<?> clazz) {
+		if (!clazz.isInterface()) {
+			return clazz;
+		}
+		for (Entry<Class<?>, BeanDefinition> entry : beanDefinitionMap.entrySet()) {
+			if (clazz.isAssignableFrom(entry.getKey())) {
+				return entry.getKey();
+			}
+		}
+		return clazz;
 	}
 
 	private Object createBean(Class<?> clazz) {
 		BeanDefinition beanDefinition;
 		if (clazz.isInterface()) {
 			beanDefinition = getInterfaceBeanDefinition(clazz);
-		}else {
+		} else {
 			beanDefinition = beanDefinitionMap.get(clazz);
 		}
 		if (beanDefinition == null) {
@@ -402,7 +415,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 			throw new BeanNotExistException("Bean " + clazz + " Not Exist!");
 		}
 		for (BeanPostProcessor beanPostProcessor : beanPostProcessors) {
-			if (beanPostProcessor.matche(clazz)) {
+			if (beanPostProcessor.matches(clazz)) {
 				beanObject = beanPostProcessor.process(this, clazz, beanObject);
 			}
 		}
@@ -445,7 +458,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	}
 
 	@Override
-	public void destory() {
+	public void destroy() {
 		for (Entry<Class<?>, Object> entry : singletonPool.entrySet()) {
 			Object bean = entry.getValue();
 			if (bean instanceof DisposableBean disposableBean) {
@@ -453,6 +466,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 			}
 		}
 		singletonPool.clear();
+		ProxyContext.clear();
 	}
 
 	/**
@@ -518,9 +532,9 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 			}
 		}
 		if (method.isAnnotationPresent(ConditionalOnProperty.class)) {
-			ConditionalOnProperty conditionalOnPropertity = method.getAnnotation(ConditionalOnProperty.class);
-			String key = conditionalOnPropertity.key();
-			String value = conditionalOnPropertity.value();
+			ConditionalOnProperty conditionalOnProperty = method.getAnnotation(ConditionalOnProperty.class);
+			String key = conditionalOnProperty.key();
+			String value = conditionalOnProperty.value();
 			if (!matchesProperty(env, key, value)) {
 				return false;
 			}

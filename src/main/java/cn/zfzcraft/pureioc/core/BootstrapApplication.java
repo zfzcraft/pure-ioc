@@ -5,7 +5,7 @@ public class BootstrapApplication {
 	public static ApplicationContext run(String[] args, Class<?> mainClass) {
 			LifeCycleApplicationContext context = new AnnotationConfigApplicationContext();
 			context.setArgs(args);
-			context.setMaincClass(mainClass);
+			context.setMainClass(mainClass);
 			context.refresh();
 			return context;
 	}

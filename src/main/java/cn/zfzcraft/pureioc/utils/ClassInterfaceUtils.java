@@ -52,7 +52,7 @@ public class ClassInterfaceUtils {
         collectAllInterfaces(clazz.getSuperclass(), result);
     }
 
-	public static <T>  Set<Class<?>> getAllInterfaces(Class<T> type) {
+	public static Set<Class<?>> getAllInterfaces(Class<?> type) {
 		Set<Class<?>> allInterfaces = new HashSet<>();
         collectAllInterfaces(type, allInterfaces);
 

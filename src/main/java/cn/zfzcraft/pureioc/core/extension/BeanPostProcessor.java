@@ -7,10 +7,10 @@ import cn.zfzcraft.pureioc.core.ApplicationContext;
 public interface BeanPostProcessor extends ExtensionPoint {
 	
 	
-	boolean matche(Class<?> beanClass);
-	
+	boolean matches(Class<?> beanClass);
 
-	Object process(ApplicationContext applicationContext,Class<?> beanName, Object bean);
+
+	Object process(ApplicationContext applicationContext,Class<?> beanClass, Object bean);
 
 	/**
 	 * Smaller order executes earlier; larger order executes later.

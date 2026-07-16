@@ -16,7 +16,7 @@ public class ParallelClassLoader {
 	private static final int CPU = Runtime.getRuntime().availableProcessors();
 
 	// 自定义线程池
-	private static ThreadPoolExecutor ThreadPool = new ThreadPoolExecutor(0, CPU, 0L, TimeUnit.MILLISECONDS,
+	private static ThreadPoolExecutor threadPool = new ThreadPoolExecutor(0, CPU, 0L, TimeUnit.MILLISECONDS,
 			new LinkedBlockingQueue<>(256), new ThreadPoolExecutor.CallerRunsPolicy());
 
 	public static List<Class<?>> load(List<String> classNameList) {
@@ -41,7 +41,7 @@ public class ParallelClassLoader {
 				}
 				// 返回当前分片所有Class
 				return partClassList;
-			}, ThreadPool);
+			}, threadPool);
 			futures.add(future);
 		}
 		// 3. 等待所有任务执行完
@@ -55,8 +55,8 @@ public class ParallelClassLoader {
 				throw new RuntimeException("Load Class Failed", e);
 			}
 		}
-		ThreadPool.shutdown();
-		ThreadPool = null;
+		threadPool.shutdown();
+		threadPool = null;
 		return applicationClasses;
 	}
 

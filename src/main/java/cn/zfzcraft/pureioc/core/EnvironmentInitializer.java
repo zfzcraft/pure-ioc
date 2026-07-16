@@ -16,8 +16,6 @@ import cn.zfzcraft.pureioc.utils.ResourceUtils;
 
 public class EnvironmentInitializer {
 
-	private static final String EMPTY = "";
-
 	private static final String LINE = "-";
 
 	private static final String DOT_YML = ".yml";
@@ -54,7 +52,7 @@ public class EnvironmentInitializer {
 	}
 
 	private static boolean isNotEmpty(String activeProfile) {
-		return activeProfile != null && activeProfile != EMPTY;
+		return activeProfile != null && !activeProfile.isEmpty();
 	}
 
 	/**

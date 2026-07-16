@@ -9,7 +9,7 @@ import cn.zfzcraft.pureioc.core.exception.TooManyConstructorsException;
 import cn.zfzcraft.pureioc.core.extension.BeanFactory;
 
 
-public class CompomentBeanFactory implements BeanFactory{
+public class ComponentBeanFactory implements BeanFactory{
 
 	@Override
 	public Object createBean(ApplicationContext applicationContext, AnnotatedElement beanElement) {
@@ -19,7 +19,7 @@ public class CompomentBeanFactory implements BeanFactory{
 			throw new TooManyConstructorsException("Class "+beanClass.getName()+" has too many Declared Constructors. Only one Declared Constructor is allowed.");
 		}
 		Constructor<?> ctor = constructors[0];
-		Object[] args = resolveArgs(applicationContext,ctor.getParameterTypes());
+		Object[] args = resolveArgs(applicationContext,ctor.getParameters());
 		try {
 			Object instance = ctor.newInstance(args);
 			return instance;

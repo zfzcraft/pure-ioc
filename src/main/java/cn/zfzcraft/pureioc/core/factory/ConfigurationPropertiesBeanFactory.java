@@ -26,7 +26,7 @@ public class ConfigurationPropertiesBeanFactory implements BeanFactory {
 				beanObject = createIfNull(beanClass);
 			}
 		} catch (Exception e) {
-			throw new BeanCreationFailedException("Bean Creation Failed,must be on args Constructor", e);
+			throw new BeanCreationFailedException("Bean Creation Failed, must have a no-args constructor", e);
 		}
 		return beanObject;
 	}

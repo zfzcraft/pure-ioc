@@ -46,7 +46,7 @@ public final class ProxyContext {
 					new LazyInvocationHandler(type));
 		} else {
 			throw new LazyProxyBeanCreationFailedException("Lazy Proxy Bean :" + type
-					+ "CreationFailed on : must be interface or only one interface or annotated with @TargetInterface！");
+					+ " CreationFailed on : must be interface or only one interface or annotated with @ProxyInterface!");
 		}
 	}
 

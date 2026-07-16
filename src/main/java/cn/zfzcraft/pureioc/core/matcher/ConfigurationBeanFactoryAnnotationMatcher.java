@@ -6,7 +6,7 @@ import cn.zfzcraft.pureioc.annotations.Configuration;
 import cn.zfzcraft.pureioc.annotations.Extension;
 import cn.zfzcraft.pureioc.core.extension.BeanFactory;
 import cn.zfzcraft.pureioc.core.extension.BeanFactoryAnnotationMatcher;
-import cn.zfzcraft.pureioc.core.factory.CompomentBeanFactory;
+import cn.zfzcraft.pureioc.core.factory.ComponentBeanFactory;
 
 
 @Extension
@@ -14,7 +14,7 @@ public class ConfigurationBeanFactoryAnnotationMatcher implements BeanFactoryAnn
 
 	@Override
 	public BeanFactory getBeanFactory() {
-		return new CompomentBeanFactory();
+		return new ComponentBeanFactory();
 	}
 
 	@Override

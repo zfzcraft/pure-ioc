@@ -5,10 +5,10 @@ public interface LifeCycleApplicationContext extends ApplicationContext {
 	
 
 	void refresh();
-	
-	void destory();
+
+	void destroy();
 
 	void setArgs(String[] args);
 
-	void setMaincClass(Class<?> maincClass);
+	void setMainClass(Class<?> mainClass);
 }

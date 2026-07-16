@@ -1,6 +1,6 @@
 package cn.zfzcraft.pureioc.core.exception;
 
-public class ConstructorCircularDependencyError extends Error {
+public class ConstructorCircularDependencyError extends RuntimeException {
 
 	/**
 	 * 

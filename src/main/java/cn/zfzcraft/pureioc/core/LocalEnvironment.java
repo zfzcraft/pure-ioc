@@ -31,7 +31,7 @@ public class LocalEnvironment implements Environment {
 
 	@Override
 	public boolean containsProperty(String key) {
-		return getProperty(key)!=null;
+		return getProperty(key) != null;
 	}
 
 	@Override

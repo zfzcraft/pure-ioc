@@ -1,14 +1,10 @@
 package cn.zfzcraft.pureioc.utils;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Objects;
 
-import org.yaml.snakeyaml.Yaml;
-
-
 public class NestedMapUtils {
-
-	private static final Yaml YAML = new Yaml();
 
 	/**
 	 * 从嵌套 Map 中按 a.b.c 取最终叶子值
@@ -30,12 +26,11 @@ public class NestedMapUtils {
 	}
 
 	public static <T> T loadAs(Map<String, Object> root, String prefix, Class<T> clazz) {
-
-		// 2. 按 . 路径递归取值
 		Map<String, Object> subMap = getNestedMap(root, prefix);
-
-		// 3. 将子 Map 转成目标对象
-		return YAML.loadAs(YAML.dump(subMap), clazz);
+		if (subMap == null || subMap.isEmpty()) {
+			return null;
+		}
+		return mapToObject(subMap, clazz);
 	}
 
 	/**
@@ -43,15 +38,82 @@ public class NestedMapUtils {
 	 */
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> getNestedMap(Map<String, Object> root, String path) {
+		if (root == null) {
+			return null;
+		}
+		if (path == null || path.isEmpty()) {
+			return root;
+		}
 		String[] keys = path.split("\\.");
 		Map<String, Object> current = root;
 
 		for (int i = 0; i < keys.length - 1; i++) {
-			current = (Map<String, Object>) current.get(keys[i]);
+			if (current == null) {
+				return null;
+			}
+			Object next = current.get(keys[i]);
+			if (!(next instanceof Map)) {
+				return null;
+			}
+			current = (Map<String, Object>) next;
 		}
 
-		// 最后一级也返回 Map
-		return (Map<String, Object>) current.get(keys[keys.length - 1]);
+		if (current == null) {
+			return null;
+		}
+		Object last = current.get(keys[keys.length - 1]);
+		if (last instanceof Map) {
+			return (Map<String, Object>) last;
+		}
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <T> T mapToObject(Map<String, Object> map, Class<T> clazz) {
+		try {
+			T instance = clazz.getDeclaredConstructor().newInstance();
+			for (Field field : clazz.getDeclaredFields()) {
+				field.setAccessible(true);
+				Object rawValue = map.get(field.getName());
+				if (rawValue == null) {
+					continue;
+				}
+				Object value = convertValue(rawValue, field.getType());
+				field.set(instance, value);
+			}
+			return instance;
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to bind map to " + clazz.getName(), e);
+		}
+	}
+
+	private static Object convertValue(Object value, Class<?> targetType) {
+		if (value == null) {
+			return null;
+		}
+		if (targetType.isInstance(value)) {
+			return value;
+		}
+		if (value instanceof Map && !isSimpleType(targetType)) {
+			return mapToObject((Map<String, Object>) value, targetType);
+		}
+		String str = value.toString();
+		if (targetType == String.class) return str;
+		if (targetType == int.class || targetType == Integer.class) return Integer.parseInt(str);
+		if (targetType == long.class || targetType == Long.class) return Long.parseLong(str);
+		if (targetType == boolean.class || targetType == Boolean.class) return Boolean.parseBoolean(str);
+		if (targetType == double.class || targetType == Double.class) return Double.parseDouble(str);
+		if (targetType == float.class || targetType == Float.class) return Float.parseFloat(str);
+		if (targetType == short.class || targetType == Short.class) return Short.parseShort(str);
+		if (targetType == byte.class || targetType == Byte.class) return Byte.parseByte(str);
+		return value;
+	}
+
+	private static boolean isSimpleType(Class<?> type) {
+		return type.isPrimitive()
+				|| type == String.class
+				|| Number.class.isAssignableFrom(type)
+				|| Boolean.class == type;
 	}
 
 	/**

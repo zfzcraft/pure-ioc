@@ -41,6 +41,12 @@ import cn.zfzcraft.pureioc.utils.ResourceUtils;
 
 public final class AnnotationConfigApplicationContext implements LifeCycleApplicationContext {
 
+	public AnnotationConfigApplicationContext(String[] args,Class<?> mainClass) {
+		super();
+		this.mainClass = mainClass;
+		this.args = args;
+	}
+
 	private static final String DOT_CLASS = ".class";
 
 	private static final String META_INF_BEANS_INDEX = "META-INF/beans.index";
@@ -73,16 +79,6 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	private List<Class<?>> applicationClasses = new ArrayList<>();
 
 	private Set<Class<?>> creatingBeans = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
-	@Override
-	public void setMainClass(Class<?> mainClass) {
-		this.mainClass = mainClass;
-	}
-
-	@Override
-	public void setArgs(String[] args) {
-		this.args = args;
-	}
 
 	@Override
 	public void refresh() {
@@ -159,7 +155,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	private void asyncPreheatBeansAndClearResources() {
 		String prefix = EnvironmentProperties.class.getAnnotation(ConfigurationProperties.class).prefix();
 		EnvironmentProperties environmentProperties = NestedMapUtils.loadAs(env, prefix, EnvironmentProperties.class);
-		if (environmentProperties.isPreheat()) {
+		if (environmentProperties != null && environmentProperties.isPreheat()) {
 			new Thread(() -> {
 				preheatLazyBeans();
 				preheated.compareAndSet(false, true);
@@ -179,20 +175,27 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 	}
 
 	private void clearResources() {
-		pluginClasses.clear();
-		beanPostProcessors.clear();
-		beanDefinitionMap.clear();
-		applicationClassNameList.clear();
-		beanFactoryMap.clear();
-		applicationClasses.clear();
-		creatingBeans.clear();
-		pluginClasses = null;
-		beanPostProcessors = null;
-		beanDefinitionMap = null;
-		applicationClassNameList = null;
-		beanFactoryMap = null;
-		applicationClasses = null;
-		creatingBeans = null;
+		if (pluginClasses != null) {
+			pluginClasses.clear();
+		}
+		if (beanPostProcessors != null) {
+			beanPostProcessors.clear();
+		}
+		if (beanDefinitionMap != null) {
+			beanDefinitionMap.clear();
+		}
+		if (applicationClassNameList != null) {
+			applicationClassNameList.clear();
+		}
+		if (beanFactoryMap != null) {
+			beanFactoryMap.clear();
+		}
+		if (applicationClasses != null) {
+			applicationClasses.clear();
+		}
+		if (creatingBeans != null) {
+			creatingBeans.clear();
+		}
 	}
 
 	private void registerApplicationContext() {

@@ -19,12 +19,29 @@
 			<artifactId>snakeyaml</artifactId>
 			<version>2.2</version>
 		</dependency>
-	<dependency>
-    <groupId>org.ow2.asm</groupId>
-    <artifactId>asm</artifactId>
-    <version>9.7</version>
-</dependency>
-
+		<dependency>
+			<groupId>org.ow2.asm</groupId>
+			<artifactId>asm</artifactId>
+			<version>9.8</version>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<version>5.10.0</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>5.10.0</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+		    <groupId>com.alibaba.fastjson2</groupId>
+		    <artifactId>fastjson2</artifactId>
+		    <version>2.0.62</version>
+		    <scope>compile</scope>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>
@@ -33,7 +50,7 @@
 				<artifactId>maven-source-plugin</artifactId>
 				<version>3.2.1</version>
 				<configuration>
-					<attach>true</attach> <!-- 自动附加到install/deploy -->
+					<attach>true</attach>
 				</configuration>
 				<executions>
 					<execution>
@@ -44,6 +61,16 @@
 						</goals>
 					</execution>
 				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.2.2</version>
+				<configuration>
+					<includes>
+						<include>**/*Test.java</include>
+					</includes>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

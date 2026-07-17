@@ -127,6 +127,9 @@ public class EnvironmentInitializer {
 	private static String determineActiveProfile(Map<String, Object> env) {
 		String prefix = EnvironmentProperties.class.getAnnotation(ConfigurationProperties.class).prefix();
 		EnvironmentProperties environmentProperties = NestedMapUtils.loadAs(env, prefix, EnvironmentProperties.class);
+		if (environmentProperties == null) {
+			return null;
+		}
 		String active = environmentProperties.getActive();
 		return active == null ? null : active.trim();
 	}

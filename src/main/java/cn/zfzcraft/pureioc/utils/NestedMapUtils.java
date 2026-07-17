@@ -4,7 +4,16 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Objects;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONReader;
+
 public class NestedMapUtils {
+	
+	private static final JSONReader.Feature[] CONFIG_FEATURES = {
+            JSONReader.Feature.SupportSmartMatch,
+            JSONReader.Feature.IgnoreAutoTypeNotMatch
+    };
 
 	/**
 	 * 从嵌套 Map 中按 a.b.c 取最终叶子值
@@ -30,7 +39,8 @@ public class NestedMapUtils {
 		if (subMap == null || subMap.isEmpty()) {
 			return null;
 		}
-		return mapToObject(subMap, clazz);
+		JSONObject jsonObject =JSONObject.from(subMap);
+		return jsonObject.toJavaObject(clazz, CONFIG_FEATURES);
 	}
 
 	/**
@@ -68,7 +78,6 @@ public class NestedMapUtils {
 		return null;
 	}
 
-	@SuppressWarnings("unchecked")
 	private static <T> T mapToObject(Map<String, Object> map, Class<T> clazz) {
 		try {
 			T instance = clazz.getDeclaredConstructor().newInstance();
@@ -87,6 +96,7 @@ public class NestedMapUtils {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private static Object convertValue(Object value, Class<?> targetType) {
 		if (value == null) {
 			return null;

@@ -22,7 +22,7 @@ public class ResourceUtils {
 		try {
 			urls = ClassLoaderUtils.getClassLoader().getResources(path);
 		} catch (Exception e) {
-			throw new ResourcesNotFoundException("Resources " + path + " Not Found!", e);
+			throw new ResourcesNotFoundException("Resources " + path + " Not Found!");
 		} 
 		return urls;
 	}

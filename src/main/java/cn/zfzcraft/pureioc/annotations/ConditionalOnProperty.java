@@ -7,5 +7,7 @@ import java.lang.annotation.*;
 public @interface ConditionalOnProperty {
 	
 	String key();
+	
 	String value();
+	
 }

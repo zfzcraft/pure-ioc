@@ -21,7 +21,7 @@ import cn.zfzcraft.pureioc.annotations.Extension;
 import cn.zfzcraft.pureioc.annotations.Imports;
 import cn.zfzcraft.pureioc.core.exception.BeanFactoryNotFoundException;
 import cn.zfzcraft.pureioc.core.exception.BeanNotExistException;
-import cn.zfzcraft.pureioc.core.exception.ConstructorCircularDependencyError;
+import cn.zfzcraft.pureioc.core.exception.ConstructorCircularDependencyException;
 import cn.zfzcraft.pureioc.core.exception.ExtensionCreationFailedException;
 import cn.zfzcraft.pureioc.core.exception.IgnoreException;
 import cn.zfzcraft.pureioc.core.exception.ResourcesNotFoundException;
@@ -210,7 +210,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 							.getConstructor().newInstance();
 					environmentPostProcessor.process(environment);
 				} catch (Exception e) {
-					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器", e);
+					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器");
 				}
 			}
 		}
@@ -226,7 +226,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 				Map<String, Object> networkMap = loader.load(environment);
 				EnvironmentInitializer.deepMerge(env, networkMap);
 			} catch (Exception e) {
-				throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器", e);
+				throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器");
 			}
 		}
 	}
@@ -248,7 +248,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 					beanFactoryMap.putIfAbsent(beanFactoryAnnotationMatcher.getBeanAnnotationClass(),
 							beanFactoryAnnotationMatcher.getBeanFactory());
 				} catch (Exception e) {
-					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器", e);
+					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器");
 				}
 			}
 		}
@@ -262,7 +262,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 					BeanPostProcessor beanPostProcessor = (BeanPostProcessor) constructor.newInstance();
 					beanPostProcessors.add(beanPostProcessor);
 				} catch (Exception e) {
-					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器", e);
+					throw new ExtensionCreationFailedException("扩展点类[" + clazz.getName() + "]实例化失败，必须为无参构造器");
 				}
 			}
 		}
@@ -380,7 +380,7 @@ public final class AnnotationConfigApplicationContext implements LifeCycleApplic
 			bean = singletonPool.get(resolvedClass);
 			if (bean == null) {
 				if (creatingBeans.contains(resolvedClass)) {
-					throw new ConstructorCircularDependencyError("Constructor Circular Dependency Error on Class :" + resolvedClass);
+					throw new ConstructorCircularDependencyException("Constructor Circular Dependency Error on Class :" + resolvedClass);
 				}
 				creatingBeans.add(resolvedClass);
 				bean = createBean(clazz);
